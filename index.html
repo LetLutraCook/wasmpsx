@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WASM PSX</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <script src="wasmpsx.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #eee;
+      margin: 0;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .controls button {
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      border: none;
+      background: #3b82f6;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .controls button:hover {
+      background: #2563eb;
+    }
+
+    .controls input[type="file"] {
+      color: #eee;
+    }
+
+    wasmpsx-player {
+      display: block;
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 4 / 3;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <wasmpsx-player id="psx-player"></wasmpsx-player>
+
+    <section class="controls">
+      <input id="rom-file" type="file" accept=".bin,.iso,.img" />
+      <button id="load-file-btn">Load File</button>
+    </section>
+  </main>
+
+  <script>
+    const player = document.getElementById("psx-player");
+    const fileInput = document.getElementById("rom-file");
+    const loadFileBtn = document.getElementById("load-file-btn");
+
+    loadFileBtn.addEventListener("click", () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        alert("Please choose a ROM file first.");
+        return;
+      }
+      player.readFile(file);
+    });
+  </script>
+</body>
+</html>
