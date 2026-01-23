@@ -1,40 +1,88 @@
-
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>WASMpsx</title>
+  <title>WASMpsx Diagnostic</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- Load WASMpsx -->
+  <!-- Load WASMpsx from root -->
   <script src="wasmpsx.min.js"></script>
 </head>
 <body>
 
-<h1>WASMpsx Test</h1>
+<h1>WASMpsx Diagnostic</h1>
 
 <!-- Emulator display -->
 <wasmpsx-player id="player"></wasmpsx-player>
 
 <!-- File picker -->
-<input id="romfile" type="file" />
+<p>
+  <input id="romfile" type="file">
+</p>
 
 <!-- Log output -->
 <pre id="log" style="background:#000; color:#0f0; padding:10px; white-space:pre-wrap;"></pre>
 
 <script>
-  const player = document.getElementById("player");
-  const fileInput = document.getElementById("romfile");
   const logBox = document.getElementById("log");
 
   function log(msg) {
     logBox.textContent += msg + "\n";
+    logBox.scrollTop = logBox.scrollHeight;
   }
 
-  log("WASMpsx initialized.");
-  log("Waiting for ROM...");
+  log("Page loaded.");
+  log("Checking WASMpsx setup...");
 
-  // Handle file selection
+  // 1) Check if the custom element registered
+  const wasmpsxElementDef = customElements.get("wasmpsx-player");
+  if (!wasmpsxElementDef) {
+    log("ERROR: <wasmpsx-player> custom element is NOT registered.");
+    log("This means wasmpsx.min.js did not load or failed to initialize.");
+  } else {
+    log("OK: <wasmpsx-player> custom element is registered.");
+  }
+
+  const player = document.getElementById("player");
+
+  // 2) After a short delay, check for shadowRoot and canvas
+  setTimeout(() => {
+    try {
+      if (!player) {
+        log("ERROR: No element with id='player' found.");
+        return;
+      }
+
+      if (!player.shadowRoot) {
+        log("ERROR: player.shadowRoot is null. The component did not fully initialize.");
+      } else {
+        log("OK: player.shadowRoot exists.");
+
+        const canvas = player.shadowRoot.querySelector("canvas");
+        if (!canvas) {
+          log("ERROR: No <canvas> found inside wasmpsx-player shadowRoot.");
+        } else {
+          log("OK: <canvas> found inside wasmpsx-player.");
+          // Optional: basic styling
+          canvas.style = "background:black; display:block; margin:auto;";
+        }
+      }
+
+      // 3) Check if readFile() exists
+      if (typeof player.readFile === "function") {
+        log("OK: player.readFile() is available.");
+      } else {
+        log("ERROR: player.readFile is NOT a function.");
+        log("This usually means WASMpsx did not fully initialize (WASM or worker failed).");
+      }
+    } catch (err) {
+      log("EXCEPTION during initialization checks: " + err);
+    }
+  }, 500);
+
+  // 4) Handle file selection and attempt to load ROM
+  const fileInput = document.getElementById("romfile");
+
   fileInput.addEventListener("change", () => {
     const file = fileInput.files[0];
     if (!file) {
@@ -44,17 +92,23 @@
 
     log("Selected file: " + file.name);
     log("Size: " + Math.round(file.size / 1024 / 1024) + " MB");
-    log("Loading ROM...");
 
+    if (typeof player.readFile !== "function") {
+      log("ERROR: Cannot call readFile() because it is not a function.");
+      log("WASMpsx is not initialized correctly. Check that all JS/WASM files are present in the root.");
+      return;
+    }
+
+    log("Calling player.readFile(file)...");
     try {
       player.readFile(file);
-      log("readFile() called.");
+      log("readFile() call returned (this does NOT guarantee the ROM loaded successfully).");
     } catch (err) {
-      log("ERROR calling readFile(): " + err);
+      log("EXCEPTION calling readFile(): " + err);
     }
   });
 
-  // Catch global errors
+  // 5) Catch global errors
   window.addEventListener("error", (e) => {
     log("WINDOW ERROR: " + e.message);
   });
@@ -62,17 +116,6 @@
   window.addEventListener("unhandledrejection", (e) => {
     log("PROMISE ERROR: " + e.reason);
   });
-
-  // Style canvas after it appears
-  setTimeout(() => {
-    try {
-      const canvas = player.shadowRoot.querySelector("canvas");
-      canvas.style = "background:black; display:block; margin:auto;";
-      log("Canvas ready.");
-    } catch (err) {
-      log("Canvas error: " + err);
-    }
-  }, 200);
 </script>
 
 </body>
