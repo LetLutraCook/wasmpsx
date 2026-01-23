@@ -2,77 +2,75 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>WASMpsx Final Debug</title>
+    <title>WASMpsx Final Stage</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
     <script src="coi-serviceworker.min.js"></script>
-
-    <script type="module" src="wasmpsx.min.js"></script>
 </head>
 <body style="background:#111; color:#0f0; font-family:monospace; padding:20px;">
 
-    <h1>WASMpsx iPad Status</h1>
+    <h1>WASMpsx Emulator</h1>
     
     <wasmpsx-player id="player"></wasmpsx-player>
 
-    <div id="controls" style="margin: 20px 0;">
+    <div style="margin: 20px 0;">
         <input type="file" id="romfile">
     </div>
 
-    <div id="log" style="background:#000; border:1px solid #333; padding:15px; height:300px; overflow-y:scroll; font-size:12px;"></div>
+    <div id="log" style="background:#000; border:1px solid #333; padding:15px; height:250px; overflow-y:scroll; font-size:12px;"></div>
 
-    <script>
+    <script type="module">
         const logger = document.getElementById("log");
         function log(msg) {
             logger.innerHTML += `<div>${msg}</div>`;
             logger.scrollTop = logger.scrollHeight;
         }
 
-        async function init() {
-            log("Checking browser security...");
-            
-            // 1. Check if the Service Worker actually registered
-            if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                if (regs.length > 0) {
-                    log(`✅ ServiceWorker: Active (${regs[0].active ? 'Running' : 'Starting'})`);
-                } else {
-                    log("❌ ServiceWorker: NOT FOUND. Ensure 'coi-serviceworker.min.js' is in the root.");
-                }
+        async function boot() {
+            log("--- Booting Emulator ---");
+            log(`Isolation: ${window.crossOriginIsolated ? "✅" : "❌"}`);
+
+            // 1. Manually load the script as a module
+            log("Loading wasmpsx.min.js...");
+            try {
+                await import('./wasmpsx.min.js');
+                log("Script file executed.");
+            } catch (e) {
+                log(`❌ SCRIPT CRASH: ${e.message}`);
             }
 
-            // 2. Check the "Wall"
-            const isIsolated = window.crossOriginIsolated;
-            log(`Cross-Origin Isolated: ${isIsolated ? "✅ YES" : "❌ NO"}`);
-            log(`SharedArrayBuffer: ${typeof SharedArrayBuffer !== "undefined" ? "✅ YES" : "❌ NO"}`);
-
-            if (!isIsolated) {
-                log("<br>⚠️ CRITICAL: iOS is blocking the emulator's memory.");
-                log("Try this: Clear Safari Cache or open in a NON-Private tab.");
-            }
-
-            // 3. Check for the Element
-            setTimeout(() => {
+            // 2. Poll for registration (up to 5 seconds)
+            let attempts = 0;
+            const checkReg = setInterval(() => {
+                attempts++;
                 const isReg = customElements.get("wasmpsx-player");
+                
                 if (isReg) {
-                    log("✅ SUCCESS: <wasmpsx-player> is registered!");
+                    clearInterval(checkReg);
+                    log("✅ SUCCESS: <wasmpsx-player> registered!");
+                    setupFileListener();
+                } else if (attempts > 10) {
+                    clearInterval(checkReg);
+                    log("❌ FAIL: Element registration timed out.");
+                    log("Is wasmpsx.wasm in the root folder?");
                 } else {
-                    log("❌ FAIL: <wasmpsx-player> is still a hollow tag.");
+                    log("Waiting for registration...");
                 }
-            }, 2000);
+            }, 500);
         }
 
-        document.getElementById("romfile").onchange = (e) => {
-            const p = document.getElementById("player");
-            if (p.readFile) {
-                log("Starting ROM...");
-                p.readFile(e.target.files[0]);
-            } else {
-                log("❌ ERROR: readFile function missing.");
-            }
-        };
+        function setupFileListener() {
+            document.getElementById("romfile").onchange = (e) => {
+                const p = document.getElementById("player");
+                if (p && typeof p.readFile === "function") {
+                    log("Starting ROM: " + e.target.files[0].name);
+                    p.readFile(e.target.files[0]);
+                } else {
+                    log("❌ API ERROR: Custom element exists but .readFile() is missing.");
+                }
+            };
+        }
 
-        init();
+        boot();
     </script>
 </body>
 </html>
