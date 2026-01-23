@@ -1,87 +1,109 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>WASMpsx Diagnostic</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="wasmpsx.min.js"></script>
+    <meta charset="UTF-8">
+    <title>WASMpsx iPad Debugger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <style>
+        body { font-family: sans-serif; background: #111; color: #ccc; padding: 20px; }
+        #log { 
+            background: #000; color: #0f0; padding: 15px; 
+            white-space: pre-wrap; font-family: monospace; 
+            border: 1px solid #333; height: 300px; overflow-y: scroll;
+        }
+        .status-msg { margin-bottom: 10px; font-weight: bold; }
+    </style>
+
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            const logBox = document.getElementById("log");
+            const output = `❌ RUNTIME ERROR: ${msg}\nLine: ${line}, Col: ${col}\n`;
+            if (logBox) logBox.textContent += output;
+            console.error(msg);
+            return false;
+        };
+    </script>
+
+    <script type="module" src="wasmpsx.min.js"></script>
 </head>
 <body>
 
-<h1>WASMpsx Diagnostic</h1>
+    <h2>WASMpsx iPad Diagnostic</h2>
 
-<wasmpsx-player id="player"></wasmpsx-player>
+    <wasmpsx-player id="player"></wasmpsx-player>
 
-<p><input id="romfile" type="file"></p>
+    <div class="status-msg">System Logs:</div>
+    <pre id="log">Initializing diagnostic...</pre>
 
-<pre id="log" style="background:#000; color:#0f0; padding:10px; white-space:pre-wrap; font-family:monospace; min-height: 200px;"></pre>
+    <p>
+        <label style="background:#444; padding:10px; border-radius:5px; cursor:pointer;">
+            📁 Select ROM
+            <input id="romfile" type="file" style="display:none">
+        </label>
+    </p>
 
-<script>
-  const logBox = document.getElementById("log");
-  function log(msg) {
-    logBox.textContent += msg + "\n";
-    logBox.scrollTop = logBox.scrollHeight;
-  }
-
-  async function runDiagnostics() {
-    log("--- System Check ---");
-    
-    // 1. Network Probe: Can we actually see the file?
-    try {
-      const resp = await fetch("wasmpsx.min.js", { method: 'HEAD' });
-      if (resp.ok) {
-        log(`FILE REACHABLE: wasmpsx.min.js found (MIME: ${resp.headers.get('Content-Type')})`);
-      } else {
-        log(`FILE MISSING: Server returned ${resp.status} for wasmpsx.min.js`);
-      }
-    } catch (e) {
-      log("FETCH ERROR: Network blocked the probe.");
-    }
-
-    // 2. Registration Check
-    const wasmpsxElementDef = customElements.get("wasmpsx-player");
-    if (!wasmpsxElementDef) {
-      log("ERROR: <wasmpsx-player> not registered. The JS likely crashed during execution.");
-    } else {
-      log("OK: <wasmpsx-player> is registered.");
-    }
-
-    // 3. Instance Check
-    const player = document.getElementById("player");
-    setTimeout(() => {
-      if (player && player.shadowRoot) {
-        log("OK: ShadowRoot detected.");
-        if (typeof player.readFile === "function") {
-          log("OK: player.readFile is ready.");
-        } else {
-          log("ERROR: API functions (readFile) missing from element.");
+    <script>
+        const logBox = document.getElementById("log");
+        function log(msg) {
+            logBox.textContent += msg + "\n";
+            logBox.scrollTop = logBox.scrollHeight;
         }
-      } else {
-        log("ERROR: Element exists but no ShadowRoot. It's a 'hollow' tag.");
-      }
-    }, 1000);
-  }
 
-  // Handle ROM loading
-  document.getElementById("romfile").addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    const player = document.getElementById("player");
-    if (file && typeof player.readFile === "function") {
-      log("Loading: " + file.name);
-      player.readFile(file);
-    } else {
-      log("Action failed: readFile is not a function.");
-    }
-  });
+        async function runDeepScan() {
+            log("--- Starting Deep Scan ---");
 
-  // Global error capture for Safari/iPad
-  window.onerror = function(msg, url, line) {
-    log(`CRITICAL JS ERROR: ${msg} (Line: ${line})`);
-    return false;
-  };
+            // Check WASM Support
+            const wasmSupported = typeof WebAssembly === "object";
+            log(`WASM Hardware Support: ${wasmSupported ? "✅ YES" : "❌ NO"}`);
 
-  runDiagnostics();
-</script>
+            // Check for modern features Safari might be choking on
+            log(`SharedArrayBuffer Support: ${typeof SharedArrayBuffer !== "undefined" ? "✅" : "❌ (Likely iPadOS < 15.4)"}`);
 
+            // Wait 1.5 seconds to give the module time to register
+            log("Waiting for wasmpsx-player registration...");
+            await new Promise(r => setTimeout(r, 1500));
+
+            const playerElement = document.getElementById("player");
+            const definition = customElements.get("wasmpsx-player");
+
+            if (definition) {
+                log("✅ SUCCESS: <wasmpsx-player> is registered.");
+                if (playerElement.shadowRoot) {
+                    log("✅ SUCCESS: ShadowRoot is attached.");
+                } else {
+                    log("⚠️ WARNING: Element registered but ShadowRoot is missing.");
+                }
+            } else {
+                log("❌ ERROR: <wasmpsx-player> NOT registered.");
+                log("Possible cause: Syntax error in wasmpsx.min.js or missing 'wasmpsx.wasm' file.");
+            }
+
+            // Probe the actual file content to see if it's empty or blocked
+            try {
+                const testFetch = await fetch("wasmpsx.min.js");
+                const size = (await testFetch.blob()).size;
+                log(`File Check: wasmpsx.min.js is ${Math.round(size/1024)} KB`);
+            } catch (e) {
+                log("❌ FETCH ERROR: Could not read file size.");
+            }
+        }
+
+        document.getElementById("romfile").addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            const player = document.getElementById("player");
+            log(`Attempting to load: ${file.name}`);
+            
+            if (typeof player.readFile === "function") {
+                player.readFile(file);
+            } else {
+                log("❌ ERROR: player.readFile is not a function. Component is dead.");
+            }
+        });
+
+        // Clear initial message and run
+        logBox.textContent = "";
+        runDeepScan();
+    </script>
 </body>
 </html>
