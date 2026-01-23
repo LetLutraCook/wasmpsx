@@ -4,118 +4,83 @@
   <meta charset="UTF-8">
   <title>WASMpsx Diagnostic</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Load WASMpsx from root -->
   <script src="wasmpsx.min.js"></script>
 </head>
 <body>
 
 <h1>WASMpsx Diagnostic</h1>
 
-<!-- Emulator display -->
 <wasmpsx-player id="player"></wasmpsx-player>
 
-<!-- File picker -->
-<p>
-  <input id="romfile" type="file">
-</p>
+<p><input id="romfile" type="file"></p>
 
-<!-- Log output -->
-<pre id="log" style="background:#000; color:#0f0; padding:10px; white-space:pre-wrap;"></pre>
+<pre id="log" style="background:#000; color:#0f0; padding:10px; white-space:pre-wrap; font-family:monospace; min-height: 200px;"></pre>
 
 <script>
   const logBox = document.getElementById("log");
-
   function log(msg) {
     logBox.textContent += msg + "\n";
     logBox.scrollTop = logBox.scrollHeight;
   }
 
-  log("Page loaded.");
-  log("Checking WASMpsx setup...");
+  async function runDiagnostics() {
+    log("--- System Check ---");
+    
+    // 1. Network Probe: Can we actually see the file?
+    try {
+      const resp = await fetch("wasmpsx.min.js", { method: 'HEAD' });
+      if (resp.ok) {
+        log(`FILE REACHABLE: wasmpsx.min.js found (MIME: ${resp.headers.get('Content-Type')})`);
+      } else {
+        log(`FILE MISSING: Server returned ${resp.status} for wasmpsx.min.js`);
+      }
+    } catch (e) {
+      log("FETCH ERROR: Network blocked the probe.");
+    }
 
-  // 1) Check if the custom element registered
-  const wasmpsxElementDef = customElements.get("wasmpsx-player");
-  if (!wasmpsxElementDef) {
-    log("ERROR: <wasmpsx-player> custom element is NOT registered.");
-    log("This means wasmpsx.min.js did not load or failed to initialize.");
-  } else {
-    log("OK: <wasmpsx-player> custom element is registered.");
+    // 2. Registration Check
+    const wasmpsxElementDef = customElements.get("wasmpsx-player");
+    if (!wasmpsxElementDef) {
+      log("ERROR: <wasmpsx-player> not registered. The JS likely crashed during execution.");
+    } else {
+      log("OK: <wasmpsx-player> is registered.");
+    }
+
+    // 3. Instance Check
+    const player = document.getElementById("player");
+    setTimeout(() => {
+      if (player && player.shadowRoot) {
+        log("OK: ShadowRoot detected.");
+        if (typeof player.readFile === "function") {
+          log("OK: player.readFile is ready.");
+        } else {
+          log("ERROR: API functions (readFile) missing from element.");
+        }
+      } else {
+        log("ERROR: Element exists but no ShadowRoot. It's a 'hollow' tag.");
+      }
+    }, 1000);
   }
 
-  const player = document.getElementById("player");
-
-  // 2) After a short delay, check for shadowRoot and canvas
-  setTimeout(() => {
-    try {
-      if (!player) {
-        log("ERROR: No element with id='player' found.");
-        return;
-      }
-
-      if (!player.shadowRoot) {
-        log("ERROR: player.shadowRoot is null. The component did not fully initialize.");
-      } else {
-        log("OK: player.shadowRoot exists.");
-
-        const canvas = player.shadowRoot.querySelector("canvas");
-        if (!canvas) {
-          log("ERROR: No <canvas> found inside wasmpsx-player shadowRoot.");
-        } else {
-          log("OK: <canvas> found inside wasmpsx-player.");
-          // Optional: basic styling
-          canvas.style = "background:black; display:block; margin:auto;";
-        }
-      }
-
-      // 3) Check if readFile() exists
-      if (typeof player.readFile === "function") {
-        log("OK: player.readFile() is available.");
-      } else {
-        log("ERROR: player.readFile is NOT a function.");
-        log("This usually means WASMpsx did not fully initialize (WASM or worker failed).");
-      }
-    } catch (err) {
-      log("EXCEPTION during initialization checks: " + err);
-    }
-  }, 500);
-
-  // 4) Handle file selection and attempt to load ROM
-  const fileInput = document.getElementById("romfile");
-
-  fileInput.addEventListener("change", () => {
-    const file = fileInput.files[0];
-    if (!file) {
-      log("No file selected.");
-      return;
-    }
-
-    log("Selected file: " + file.name);
-    log("Size: " + Math.round(file.size / 1024 / 1024) + " MB");
-
-    if (typeof player.readFile !== "function") {
-      log("ERROR: Cannot call readFile() because it is not a function.");
-      log("WASMpsx is not initialized correctly. Check that all JS/WASM files are present in the root.");
-      return;
-    }
-
-    log("Calling player.readFile(file)...");
-    try {
+  // Handle ROM loading
+  document.getElementById("romfile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    const player = document.getElementById("player");
+    if (file && typeof player.readFile === "function") {
+      log("Loading: " + file.name);
       player.readFile(file);
-      log("readFile() call returned (this does NOT guarantee the ROM loaded successfully).");
-    } catch (err) {
-      log("EXCEPTION calling readFile(): " + err);
+    } else {
+      log("Action failed: readFile is not a function.");
     }
   });
 
-  // 5) Catch global errors
-  window.addEventListener("error", (e) => {
-    log("WINDOW ERROR: " + e.message);
-  });
+  // Global error capture for Safari/iPad
+  window.onerror = function(msg, url, line) {
+    log(`CRITICAL JS ERROR: ${msg} (Line: ${line})`);
+    return false;
+  };
 
-  window.addEventListener("unhandledrejection", (e) => {
-    log("PROMISE ERROR: " + e.reason);
-  });
+  runDiagnostics();
 </script>
 
 </body>
