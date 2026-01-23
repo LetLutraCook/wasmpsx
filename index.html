@@ -2,108 +2,77 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>WASMpsx iPad Debugger</title>
+    <title>WASMpsx Final Debug</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    
-    <style>
-        body { font-family: sans-serif; background: #111; color: #ccc; padding: 20px; }
-        #log { 
-            background: #000; color: #0f0; padding: 15px; 
-            white-space: pre-wrap; font-family: monospace; 
-            border: 1px solid #333; height: 300px; overflow-y: scroll;
-        }
-        .status-msg { margin-bottom: 10px; font-weight: bold; }
-    </style>
 
-    <script>
-        window.onerror = function(msg, url, line, col, error) {
-            const logBox = document.getElementById("log");
-            const output = `❌ RUNTIME ERROR: ${msg}\nLine: ${line}, Col: ${col}\n`;
-            if (logBox) logBox.textContent += output;
-            console.error(msg);
-            return false;
-        };
-    </script>
+    <script src="coi-serviceworker.min.js"></script>
 
     <script type="module" src="wasmpsx.min.js"></script>
 </head>
-<body>
+<body style="background:#111; color:#0f0; font-family:monospace; padding:20px;">
 
-    <h2>WASMpsx iPad Diagnostic</h2>
-
+    <h1>WASMpsx iPad Status</h1>
+    
     <wasmpsx-player id="player"></wasmpsx-player>
 
-    <div class="status-msg">System Logs:</div>
-    <pre id="log">Initializing diagnostic...</pre>
+    <div id="controls" style="margin: 20px 0;">
+        <input type="file" id="romfile">
+    </div>
 
-    <p>
-        <label style="background:#444; padding:10px; border-radius:5px; cursor:pointer;">
-            📁 Select ROM
-            <input id="romfile" type="file" style="display:none">
-        </label>
-    </p>
+    <div id="log" style="background:#000; border:1px solid #333; padding:15px; height:300px; overflow-y:scroll; font-size:12px;"></div>
 
     <script>
-        const logBox = document.getElementById("log");
+        const logger = document.getElementById("log");
         function log(msg) {
-            logBox.textContent += msg + "\n";
-            logBox.scrollTop = logBox.scrollHeight;
+            logger.innerHTML += `<div>${msg}</div>`;
+            logger.scrollTop = logger.scrollHeight;
         }
 
-        async function runDeepScan() {
-            log("--- Starting Deep Scan ---");
-
-            // Check WASM Support
-            const wasmSupported = typeof WebAssembly === "object";
-            log(`WASM Hardware Support: ${wasmSupported ? "✅ YES" : "❌ NO"}`);
-
-            // Check for modern features Safari might be choking on
-            log(`SharedArrayBuffer Support: ${typeof SharedArrayBuffer !== "undefined" ? "✅" : "❌ (Likely iPadOS < 15.4)"}`);
-
-            // Wait 1.5 seconds to give the module time to register
-            log("Waiting for wasmpsx-player registration...");
-            await new Promise(r => setTimeout(r, 1500));
-
-            const playerElement = document.getElementById("player");
-            const definition = customElements.get("wasmpsx-player");
-
-            if (definition) {
-                log("✅ SUCCESS: <wasmpsx-player> is registered.");
-                if (playerElement.shadowRoot) {
-                    log("✅ SUCCESS: ShadowRoot is attached.");
-                } else {
-                    log("⚠️ WARNING: Element registered but ShadowRoot is missing.");
-                }
-            } else {
-                log("❌ ERROR: <wasmpsx-player> NOT registered.");
-                log("Possible cause: Syntax error in wasmpsx.min.js or missing 'wasmpsx.wasm' file.");
-            }
-
-            // Probe the actual file content to see if it's empty or blocked
-            try {
-                const testFetch = await fetch("wasmpsx.min.js");
-                const size = (await testFetch.blob()).size;
-                log(`File Check: wasmpsx.min.js is ${Math.round(size/1024)} KB`);
-            } catch (e) {
-                log("❌ FETCH ERROR: Could not read file size.");
-            }
-        }
-
-        document.getElementById("romfile").addEventListener("change", (e) => {
-            const file = e.target.files[0];
-            const player = document.getElementById("player");
-            log(`Attempting to load: ${file.name}`);
+        async function init() {
+            log("Checking browser security...");
             
-            if (typeof player.readFile === "function") {
-                player.readFile(file);
-            } else {
-                log("❌ ERROR: player.readFile is not a function. Component is dead.");
+            // 1. Check if the Service Worker actually registered
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                if (regs.length > 0) {
+                    log(`✅ ServiceWorker: Active (${regs[0].active ? 'Running' : 'Starting'})`);
+                } else {
+                    log("❌ ServiceWorker: NOT FOUND. Ensure 'coi-serviceworker.min.js' is in the root.");
+                }
             }
-        });
 
-        // Clear initial message and run
-        logBox.textContent = "";
-        runDeepScan();
+            // 2. Check the "Wall"
+            const isIsolated = window.crossOriginIsolated;
+            log(`Cross-Origin Isolated: ${isIsolated ? "✅ YES" : "❌ NO"}`);
+            log(`SharedArrayBuffer: ${typeof SharedArrayBuffer !== "undefined" ? "✅ YES" : "❌ NO"}`);
+
+            if (!isIsolated) {
+                log("<br>⚠️ CRITICAL: iOS is blocking the emulator's memory.");
+                log("Try this: Clear Safari Cache or open in a NON-Private tab.");
+            }
+
+            // 3. Check for the Element
+            setTimeout(() => {
+                const isReg = customElements.get("wasmpsx-player");
+                if (isReg) {
+                    log("✅ SUCCESS: <wasmpsx-player> is registered!");
+                } else {
+                    log("❌ FAIL: <wasmpsx-player> is still a hollow tag.");
+                }
+            }, 2000);
+        }
+
+        document.getElementById("romfile").onchange = (e) => {
+            const p = document.getElementById("player");
+            if (p.readFile) {
+                log("Starting ROM...");
+                p.readFile(e.target.files[0]);
+            } else {
+                log("❌ ERROR: readFile function missing.");
+            }
+        };
+
+        init();
     </script>
 </body>
 </html>
