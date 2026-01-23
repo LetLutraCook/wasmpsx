@@ -2,31 +2,21 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>WASMpsx Emulator</title>
+    <title>WASMpsx Final</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    
     <script src="coi-serviceworker.min.js"></script>
-
-    <script>
-        window.WASMpsxOptions = {
-            wasmUrl: "wasmpsx_worker.wasm",
-            workerUrl: "wasmpsx_worker.js"
-        };
-    </script>
-
     <script type="module" src="wasmpsx.min.js"></script>
 </head>
 <body style="background:#111; color:#0f0; font-family:monospace; padding:20px;">
 
-    <h3>WASMpsx Status</h3>
-    
+    <h3>PS1 Diagnostic</h3>
     <wasmpsx-player id="player"></wasmpsx-player>
 
     <div style="margin: 20px 0;">
         <input type="file" id="romfile">
     </div>
 
-    <pre id="log" style="background:#000; border:1px solid #333; padding:15px; height:250px; overflow-y:scroll; font-size:12px;"></pre>
+    <pre id="log" style="background:#000; border:1px solid #333; padding:15px; height:300px; overflow-y:scroll; font-size:12px;"></pre>
 
     <script>
         const logger = document.getElementById("log");
@@ -35,46 +25,46 @@
             logger.scrollTop = logger.scrollHeight;
         }
 
-        async function init() {
-            log("--- System Check ---");
-            log(`SharedArrayBuffer: ${typeof SharedArrayBuffer !== 'undefined' ? '✅' : '❌'}`);
+        // Catch the specific error when the script fails to find its WASM engine
+        window.addEventListener('error', (e) => {
+            if (e.message.includes('wasm') || e.message.includes('fetch')) {
+                log("❌ ENGINE ERROR: " + e.message);
+            }
+        }, true);
+
+        async function run() {
+            log("--- Checking Engine ---");
             
-            // Check for the files shown in your screenshot
-            const files = ["wasmpsx_worker.wasm", "wasmpsx_worker.js", "wasmpsx_ww.wasm"];
-            for (const f of files) {
-                try {
-                    const r = await fetch(f, { method: 'HEAD' });
-                    log(`${f}: ${r.ok ? '✅ Found' : '❌ Missing'}`);
-                } catch(e) { log(`${f}: ❌ Error`); }
+            // Test if the expected default filename exists
+            const test = await fetch("wasmpsx.wasm", { method: 'HEAD' });
+            if (!test.ok) {
+                log("⚠️ CRITICAL MISSING FILE: wasmpsx.wasm");
+                log("Your screenshot shows 'wasmpsx_worker.wasm'.");
+                log("RENAME 'wasmpsx_worker.wasm' to 'wasmpsx.wasm' in GitHub.");
+            } else {
+                log("✅ wasmpsx.wasm is present.");
             }
 
-            log("Waiting for element to wake up...");
-            
             let attempts = 0;
             const check = setInterval(() => {
                 attempts++;
-                const el = customElements.get("wasmpsx-player");
-                if (el) {
+                if (customElements.get("wasmpsx-player")) {
                     clearInterval(check);
-                    log("✅ SUCCESS: <wasmpsx-player> is active!");
-                } else if (attempts > 10) {
+                    log("✅ SUCCESS: Element Registered!");
+                } else if (attempts > 5) {
                     clearInterval(check);
-                    log("❌ FAIL: Registration timed out.");
+                    log("❌ STILL WAITING: Script is likely crashing because it can't find 'wasmpsx.wasm'.");
                 }
             }, 1000);
         }
 
         document.getElementById("romfile").onchange = (e) => {
             const p = document.getElementById("player");
-            if (p && p.readFile) {
-                log("Loading ROM...");
-                p.readFile(e.target.files[0]);
-            } else {
-                log("❌ Error: Element not initialized.");
-            }
+            if (p.readFile) p.readFile(e.target.files[0]);
+            else log("❌ Cannot load: readFile missing.");
         };
 
-        init();
+        run();
     </script>
 </body>
 </html>
