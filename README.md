@@ -1,2 +1,1 @@
-# wasmpsx
-WASM PSX but it’s in a different repository, mind-blowing
+ps1 games I guess
