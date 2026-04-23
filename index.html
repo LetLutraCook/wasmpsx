@@ -3,14 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS1 Loader</title>
+    <title>PS1 Loader - Advanced</title>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
         #setup { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 20px; }
         #game-container { width: 100%; height: 100vh; display: none; }
-        .upload-box { border: 2px dashed #555; padding: 30px; border-radius: 10px; text-align: center; background: #1a1a1a; }
-        input { margin: 10px 0; display: block; width: 100%; }
-        button { padding: 10px 20px; cursor: pointer; background: #007bff; border: none; color: white; border-radius: 5px; font-weight: bold; }
+        .upload-box { border: 2px dashed #555; padding: 30px; border-radius: 10px; text-align: center; background: #1a1a1a; width: 350px; }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; font-size: 0.9em; color: #aaa; }
+        input { margin: 10px 0; display: block; width: 100%; color: #ccc; }
+        button { width: 100%; padding: 12px; cursor: pointer; background: #007bff; border: none; color: white; border-radius: 5px; font-weight: bold; transition: background 0.2s; }
+        button:hover { background: #0056b3; }
+        #file-status { font-size: 0.8em; margin-top: 10px; color: #00ff00; }
     </style>
 </head>
 <body>
@@ -18,13 +22,20 @@
     <div id="setup">
         <div class="upload-box">
             <h3>PS1 Emulator</h3>
-            <label>1. Select BIOS (PSPONPSX660.bin)</label>
-            <input type="file" id="bios-input">
             
-            <label>2. Select Game (.cue, .chd, .pbp)</label>
-            <input type="file" id="rom-input">
+            <div class="input-group">
+                <label>1. Select BIOS (PSPONPSX660.bin)</label>
+                <input type="file" id="bios-input" accept=".bin">
+            </div>
+            
+            <div class="input-group">
+                <label>2. Select Game Folder or File</label>
+                <p style="font-size: 0.7em; color: #888;">Select the folder containing your .cue/.bin files OR select a .chd/.pbp file.</p>
+                <input type="file" id="rom-input" webkitdirectory directory multiple>
+            </div>
             
             <button id="start-btn">Launch Game</button>
+            <div id="file-status"></div>
         </div>
     </div>
 
@@ -32,34 +43,63 @@
         <div id="emulator"></div>
     </div>
 
-    <script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
     <script>
         let biosUrl = "";
-        let romUrl = "";
+        let gameFiles = [];
+        let mainGameFile = null;
 
+        // Handle BIOS selection
         document.getElementById('bios-input').addEventListener('change', function(e) {
             if (e.target.files[0]) biosUrl = URL.createObjectURL(e.target.files[0]);
         });
 
+        // Handle Game selection (Folder or File)
         document.getElementById('rom-input').addEventListener('change', function(e) {
-            if (e.target.files[0]) romUrl = URL.createObjectURL(e.target.files[0]);
+            gameFiles = Array.from(e.target.files);
+            const status = document.getElementById('file-status');
+            
+            // Look for the "Header" file to start the game
+            mainGameFile = gameFiles.find(f => 
+                f.name.toLowerCase().endsWith('.cue') || 
+                f.name.toLowerCase().endsWith('.chd') || 
+                f.name.toLowerCase().endsWith('.pbp')
+            );
+
+            if (mainGameFile) {
+                status.innerText = `Ready: ${mainGameFile.name} (${gameFiles.length} files detected)`;
+            } else {
+                status.style.color = "red";
+                status.innerText = "Error: No .cue, .chd, or .pbp found!";
+            }
         });
 
         document.getElementById('start-btn').addEventListener('click', function() {
-            if (!biosUrl || !romUrl) {
-                alert("Please select both a BIOS and a Game file.");
+            if (!biosUrl || !mainGameFile) {
+                alert("Please select both a BIOS and a valid Game folder/file.");
                 return;
             }
 
             document.getElementById('setup').style.display = 'none';
             document.getElementById('game-container').style.display = 'block';
 
-            EJS_player = "#emulator";
-            EJS_core = "psx";
-            EJS_gameUrl = romUrl;
-            EJS_biosUrl = biosUrl;
-            EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
-            EJS_startOnLoaded = true;
+            // Configure EmulatorJS
+            window.EJS_player = "#emulator";
+            window.EJS_core = "psx";
+            window.EJS_biosUrl = biosUrl;
+            window.EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
+            window.EJS_startOnLoaded = true;
+
+            // For multi-bin setups, we pass the .cue file as the game URL
+            // EmulatorJS handles the relative paths within the selected folder
+            window.EJS_gameUrl = URL.createObjectURL(mainGameFile);
+
+            // If it's a multi-file game, we need to provide the other files
+            if (gameFiles.length > 1) {
+                window.EJS_gameExtra = gameFiles.map(file => ({
+                    filename: file.name,
+                    data: URL.createObjectURL(file)
+                }));
+            }
 
             const loader = document.createElement('script');
             loader.src = "https://cdn.emulatorjs.org/stable/data/loader.js";
